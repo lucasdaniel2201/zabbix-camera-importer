@@ -11,11 +11,13 @@ on:
 jobs:
   # ---------------------------------------------------------------------
   # Job principal — roda a suite de unittest em diferentes versoes do Python.
-  # Diferente do app irmao do NetBox, este projeto nao usa a DPAPI do Windows
-  # (nenhuma credencial e gravada em disco), entao o runner Linux serve.
+  # Usamos windows-latest, igual ao app irmao do NetBox: a suite tem assercoes
+  # de caminho no formato do Windows (tests/test_paths.py) e o produto so e
+  # distribuido para Windows (executavel PyInstaller + instalador Inno Setup).
+  # No Linux o PySide6 ainda esbarra em bibliotecas de sistema ausentes.
   # ---------------------------------------------------------------------
   rodar-testes:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
 
     strategy:
       fail-fast: false
@@ -48,6 +50,10 @@ jobs:
       - name: Rodar a suite de testes
         run: python -m unittest discover -s tests -v
 
+  # ---------------------------------------------------------------------
+  # Lint: roda no linux de proposito. O Ruff nao depende de nada do Windows,
+  # entao o job sobe mais rapido e mais barato.
+  # ---------------------------------------------------------------------
   lint:
     runs-on: ubuntu-latest
 
