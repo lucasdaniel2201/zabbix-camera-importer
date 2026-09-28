@@ -7,7 +7,7 @@ Quando empacotado com PyInstaller:
 
 Onde gravar as saidas, em ordem de preferencia:
 1. pasta do proprio .exe (instalacao por usuario, ex.: %LOCALAPPDATA%);
-2. pasta de dados do usuario (%LOCALAPPDATA%\\ImportadorCameras), quando a do
+2. pasta de dados do usuario (%LOCALAPPDATA%\\ImportadorZabbix), quando a do
    .exe for somente leitura (ex.: instalado em Program Files ou rodando de
    unidade de rede / midia somente leitura).
 """
@@ -20,7 +20,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 # Nome da pasta de dados do usuario, usada quando a pasta do .exe nao e gravavel.
-APP_FOLDER_NAME = "ImportadorCameras"
+APP_FOLDER_NAME = "ImportadorZabbix"
 
 
 def is_frozen() -> bool:

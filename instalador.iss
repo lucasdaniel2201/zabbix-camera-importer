@@ -1,34 +1,38 @@
-; Instalador do Importador de Cameras (Inno Setup 6)
+; Instalador do Importador Zabbix (Inno Setup 6)
 ;
 ; Compilar com:
 ;   "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" instalador.iss
 ;
 ; Instalacao POR USUARIO (sem precisar de administrador) em
-; %LOCALAPPDATA%\Programs\Importador de Cameras. Essa pasta e gravavel, entao os
+; %LOCALAPPDATA%\Programs\Importador Zabbix. Essa pasta e gravavel, entao os
 ; relatorios continuam sendo salvos ao lado do executavel.
 
-#define AppName "Importador de Cameras"
-#define AppVersion "1.0.0"
-#define AppExeName "ImportadorCameras.exe"
-#define SourceExe "dist\ImportadorCameras.exe"
+#define AppName "Importador Zabbix"
+#define AppVersion "1.0.1"
+#define AppPublisher "L&K Tecnologia"
+#define AppExeName "ImportadorZabbix.exe"
+#define SourceExe "dist\ImportadorZabbix.exe"
 #define SourceIcon "app\assets\app_icon.ico"
 
 [Setup]
-; O AppId identifica o aplicativo: mantem o mesmo para permitir atualizar por cima
-; e desinstalar corretamente. Nunca mude entre versoes.
-AppId={{1087554C-D6E0-483E-846B-EDD8DB219EFD}
+; O AppId foi trocado DE PROPOSITO nesta versao por causa da colisao de nome com o
+; app do NetBox: quem tinha a versao antiga instalada precisa instalar esta por cima
+; manualmente; nao ha upgrade automatico a partir do AppId antigo.
+AppId={{411C126F-367A-4264-842E-C9BF101D419C}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
+AppPublisher={#AppPublisher}
 VersionInfoVersion={#AppVersion}
 VersionInfoDescription=Instalador do {#AppName}
+VersionInfoCompany={#AppPublisher}
 DefaultDirName={localappdata}\Programs\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 DisableWelcomePage=no
 PrivilegesRequired=lowest
 OutputDir=dist
-OutputBaseFilename=ImportadorCamerasSetup-{#AppVersion}
+OutputBaseFilename=ImportadorZabbixSetup-{#AppVersion}
 SetupIconFile={#SourceIcon}
 UninstallDisplayIcon={app}\{#AppExeName}
 UninstallDisplayName={#AppName}

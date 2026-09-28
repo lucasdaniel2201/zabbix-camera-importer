@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""Build do executavel: pyinstaller ImportadorCameras.spec
+"""Build do executavel: pyinstaller ImportadorZabbix.spec
 
-Gera um unico arquivo ImportadorCameras.exe (sem console), com o icone da marca e
+Gera um unico arquivo ImportadorZabbix.exe (sem console), com o icone da marca e
 os assets embutidos (logo, icone e fonte Inter).
 """
 
@@ -73,7 +73,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name="ImportadorCameras",
+    name="ImportadorZabbix",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

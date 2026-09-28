@@ -46,7 +46,7 @@ class TestModoEmpacotado(unittest.TestCase):
     def _frozen(self, exe_dir: Path, meipass: str):
         return [
             mock.patch.object(sys, "frozen", True, create=True),
-            mock.patch.object(sys, "executable", str(exe_dir / "ImportadorCameras.exe")),
+            mock.patch.object(sys, "executable", str(exe_dir / "ImportadorZabbix.exe")),
             mock.patch.object(sys, "_MEIPASS", meipass, create=True),
         ]
 
@@ -84,7 +84,7 @@ class TestModoEmpacotado(unittest.TestCase):
 
     def test_cai_para_dados_do_usuario_quando_exe_nao_e_gravavel(self):
         """Ex.: instalado em Program Files - nao da para escrever ao lado do .exe."""
-        exe_dir = Path(r"C:\Program Files\Importador de Cameras")
+        exe_dir = Path(r"C:\Program Files\Importador Zabbix")
         patches = self._frozen(exe_dir, r"C:\Temp\_MEI999")
         with patches[0], patches[1], patches[2]:
             with mock.patch.object(paths, "is_writable", return_value=False):

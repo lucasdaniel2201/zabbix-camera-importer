@@ -318,8 +318,8 @@ def build_light_palette() -> QPalette:
 def main() -> int:
     app = QApplication(sys.argv)
     # Nao usar setApplicationDisplayName: o Qt anexa esse nome ao titulo de cada
-    # janela, gerando titulos duplicados (ex.: "... - Zabbix - Importador de Cameras").
-    app.setApplicationName("Importador de Cameras Zabbix")
+    # janela, gerando titulos duplicados (ex.: "Importador Zabbix - Importador Zabbix").
+    app.setApplicationName("Importador Zabbix")
     app.setStyle("Fusion")
 
     family = load_brand_fonts()
