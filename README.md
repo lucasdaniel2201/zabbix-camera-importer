@@ -1,198 +1,202 @@
-# Importador de Cameras -> Zabbix
+# Importador de Câmeras para Zabbix
 
-Importacao em lote de hosts de camera de CFTV para o Zabbix, a partir de uma
-planilha (`.xlsx` ou `.csv`). Serve tanto para quem prefere linha de comando
-quanto para quem quer uma interface grafica - os dois fluxos usam exatamente a
-mesma logica de login, normalizacao e criacao de hosts.
+[![Testes](https://github.com/lucasdaniel2201/zabbix-camera-importer/actions/workflows/tests.yml/badge.svg)](https://github.com/lucasdaniel2201/zabbix-camera-importer/actions/workflows/tests.yml)
+[![Licença: MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-blue.svg)](LICENSE)
+[![Plataforma: Windows 10/11](https://img.shields.io/badge/Windows-10%2F11-0078D6.svg)]()
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)]()
 
-A criacao de hosts usa o **frontend web** do Zabbix (login + POST do formulario
-`host.create`), e nao a API por token. Assim funciona tambem em ambientes onde a
-API HTTP esta bloqueada ou o token nao e disponivel.
+Importa em lote hosts de câmera de CFTV para o Zabbix a partir de uma planilha
+(`.xlsx` ou `.csv`). Serve para quem prefere linha de comando e para quem quer
+uma interface gráfica: os dois fluxos usam exatamente a mesma lógica de login,
+normalização e criação de hosts.
 
-## Destaques do projeto
+A criação dos hosts usa o **frontend web** do Zabbix (login mais `POST` do
+formulário `host.create`), e não a API por token. É o que faz o app funcionar
+também em ambientes onde a API HTTP está bloqueada ou nenhum token está
+disponível.
 
-- **Core unico:** `zabbix_web_batch_import.py` concentra a regra de negocio e e
-  reaproveitado pela CLI, pelos scripts de lote e pela interface grafica.
-- **Interface desktop (PySide6):** login, busca de grupos/templates/proxies no
-  servidor, preview da planilha com validacao linha a linha e importacao com
-  barra de progresso.
-- **Validacao antes de importar:** nomes sao normalizados para ASCII (o Zabbix
-  rejeita acentos e alguns caracteres) e duplicados apos a normalizacao bloqueiam
-  a importacao, para voce corrigir na planilha.
-- **Relatorios:** cada execucao gera log + relatorio `.json` e `.csv`, e o
-  `consolidate.py` junta o resumo de varias execucoes.
-- **Sem credenciais em disco:** usuario e senha sao pedidos em tempo de execucao.
-- **Empacotavel:** `.exe` unico (PyInstaller) e instalador por usuario (Inno Setup).
-- **Testes automatizados** das funcoes puras, usando apenas a stdlib (`unittest`).
+**Projetos relacionados:** este app é o par do
+[netbox-device-importer](https://github.com/lucasdaniel2201/netbox-device-importer),
+que **documenta** o mesmo parque de câmeras e switches no NetBox. Um registra o
+que existe; este coloca o que existe para **monitorar**. A planilha de entrada
+pode ser a mesma nos dois.
 
-## Arquivos
+**Sumário**
 
-| Arquivo | Funcao |
+- [Para quem vai usar](#para-quem-vai-usar)
+- [Telas](#telas)
+- [Como usar](#como-usar)
+- [A planilha modelo](#a-planilha-modelo)
+- [Layout aplicado no Zabbix](#layout-aplicado-no-zabbix)
+- [Regras da importação](#regras-da-importação)
+- [Relatórios](#relatórios)
+- [Linha de comando](#linha-de-comando)
+- [Credenciais](#credenciais)
+- [Arquitetura](#arquitetura)
+- [Testes](#testes)
+- [Build do executável](#build-do-executável)
+- [Instalador e portátil](#instalador-e-portátil)
+- [Ao lançar uma nova versão](#ao-lançar-uma-nova-versão)
+- [Onde o app grava arquivos](#onde-o-app-grava-arquivos)
+- [Limitações conhecidas](#limitações-conhecidas)
+- [Status](#status)
+- [Estrutura do projeto](#estrutura-do-projeto)
+- [Controle de versão](#controle-de-versão)
+- [Licença](#licença)
+
+## Para quem vai usar
+
+Baixe o `ImportadorZabbixSetup-<versão>.exe` mais recente na página de
+**Releases** do repositório e execute. A instalação é **por usuário** (não pede
+administrador), cria atalho no Menu Iniciar e tem desinstalador.
+
+Requisitos: Windows 10/11 x64. Não precisa de Python instalado.
+
+A mesma Release traz o **executável portátil** (`ImportadorZabbix.exe`), para o
+caso de não dar para instalar. A escolha entre os dois está em *Instalador e
+portátil*, mais abaixo.
+
+## Telas
+
+| Login | Planilha carregada | Importação em andamento |
+| --- | --- | --- |
+| ![Tela de login, com usuário e senha do Zabbix](docs/screenshots/login.png) | ![Preview da planilha validada, com grupos, templates e proxy selecionados](docs/screenshots/planilha.png) | ![Barra de progresso e botão de cancelar durante a importação](docs/screenshots/importacao.png) |
+
+Os prints são gerados por um utilitário de desenvolvimento
+(`tools/screenshots.py`), rodando o app sem abrir janela, e usam apenas dados
+fictícios.
+
+## Como usar
+
+O app tem duas telas: **login** (usuário e senha do Zabbix) e o **ambiente de
+importação** (planilha, opções de criação e preview).
+
+### Login
+
+- A URL do Zabbix e a porta da interface ficam em **Configurações**, no canto do
+  card de login. A URL é usada na conexão; a porta, na criação dos hosts.
+- Usuário e senha são pedidos na tela e **não são gravados em disco**. A senha
+  some do campo assim que a conexão dá certo.
+- Ao conectar, o app busca no servidor os **grupos, templates e proxies**
+  disponíveis e preenche os seletores. O botão "Atualizar listas" refaz a
+  consulta a qualquer momento, e "Sair" encerra a sessão e limpa as listas.
+
+### Ambiente de importação
+
+1. **Baixar modelo de exemplo**: um popup permite escolher as colunas opcionais
+   do modelo. As colunas fixas são apenas **Nome do host** e **IP**. O arquivo
+   `modelo_cameras.xlsx` é gerado onde você escolher.
+2. **Escolher planilha**: aceita `.xlsx` ou `.csv`. O app valida linha a linha e
+   mostra o **preview** do que será criado, com os nomes já normalizados.
+3. **Opções de criação**: prefixo e sufixo (opcionais) e a escolha de grupos,
+   templates e proxy. Grupos e templates aceitam **múltipla seleção** e **começam
+   sem nenhuma marcação**; sem ao menos um grupo, a importação fica bloqueada.
+4. **Importar**: o progresso aparece por câmera, com botão de cancelar. Ao final,
+   um resumo mostra criados, já existentes e erros, além do caminho do relatório.
+
+## A planilha modelo
+
+Colunas: Nome do host, IP, Fabricante, Modelo, Firmware, Endereço MAC, Unidade,
+Etiqueta, Descrição.
+
+- **Nome do host**: obrigatório. É normalizado para ASCII antes de ir ao Zabbix
+  (o Zabbix rejeita acentos e alguns caracteres).
+- **IP**: obrigatório. É o IP da interface `agent` da câmera.
+- **Fabricante + Modelo + Firmware + Endereço MAC**: vão para o inventário do
+  host (`name`, `hardware`, `hardware_full` e `macaddress_a`).
+- **Etiqueta**: formato `chave:valor`, com várias separadas por `;`
+  (ex.: `site:MATRIZ`).
+- **Descrição**: campo Description do host no Zabbix.
+- **Unidade**: apenas orientação para quem preenche, não vai para o Zabbix.
+
+Cabeçalhos antigos também são aceitos como alternativa (ex.: `Name`, `IP/Nome`,
+`Fabricante:`, `MAC`), porque a planilha de câmeras existe em mais de um formato
+de exportação.
+
+**Grupo de host, template e proxy não vêm da planilha**: são escolhidos na tela
+do app (ou por argumento, no CLI) e aplicados a todas as linhas.
+
+## Layout aplicado no Zabbix
+
+Valores usados na criação do host:
+
+- `host` técnico e nome visível: o `Nome do host` da planilha, com prefixo e
+  sufixo opcionais.
+- interface: `agent`, com o IP da câmera e a porta configurada (padrão `10051`).
+- inventário: `name` = fabricante, `hardware` = modelo, `hardware_full` = modelo
+  com firmware, `macaddress_a` = MAC.
+- status: monitorado, sem inventário automático.
+
+## Regras da importação
+
+**Normalização.** Nomes são convertidos para ASCII; uma linha cujo nome mude é
+marcada com **aviso** no preview e o nome final aparece na coluna "Nome final no
+Zabbix".
+
+**Duplicados bloqueiam.** Dois nomes que colidem depois da normalização são
+tratados como **erro**: a importação fica bloqueada até você corrigir na planilha.
+
+**Validação antes de enviar.** Enquanto houver linha com IP vazio, formato de IP
+inválido ou nome inválido, o botão de importar não libera. O que está em branco
+na coluna Nome é ignorado e contabilizado como linha ignorada, junto com as
+marcadas como "troca realizada".
+
+**Hosts existentes não interrompem o lote.** Um host que já existe no Zabbix é
+detectado e contabilizado como `exists`, e o lote segue.
+
+**Falha de sessão no meio do caminho.** Se a sessão expirar durante uma execução
+longa, o app reloga uma vez e continua.
+
+## Relatórios
+
+Cada execução grava três arquivos em `reports/`:
+
+| Arquivo | Conteúdo |
 | --- | --- |
-| `zabbix_web_batch_import.py` | Importador principal (login web + `host.create`). |
-| `run_batches.py` | Executa o importador em lotes de 25; layout configuravel por opcoes. |
-| `consolidate.py` | Consolida os relatorios JSON de varias execucoes em um resumo. |
-| `xlsx_to_csv.py` | Converte a planilha de origem em CSV normalizado. |
-| `validate_camera_names.py` | Normaliza a coluna `Name` (ASCII) e valida duplicados. |
-| `exemplo_cameras.csv` | CSV de exemplo com dados ficticios (demo e testes rapido). |
-| `requirements.txt` | Dependencias Python do projeto. |
-| `reports/` | Logs e relatorios (JSON/CSV) gerados a cada execucao. |
-| `app/` | Interface grafica (PySide6) para quem nao usa linha de comando. |
-| `app/paths.py` | Resolve caminhos no codigo-fonte e no .exe (assets e relatorios). |
-| `app/session.py` | Sessao unica com o Zabbix, executada em thread dedicada. |
-| `app/spreadsheet.py` | Leitura e validacao de planilhas (xlsx/csv) no app. |
-| `app/toast.py` | Notificacoes (toasts) nao invasivas. |
-| `run_app.py` | Ponto de entrada do executavel e do atalho de desenvolvimento. |
-| `ImportadorCameras.spec` | Configuracao do build do PyInstaller. |
-| `instalador.iss` | Configuracao do instalador (Inno Setup). |
-| `version_info.txt` | Metadados do `.exe` (nome, versao). |
-| `app/assets/` | Icone do app e fonte Inter (`assets/fonts/`). |
-| `Iniciar App.bat` | Atalho para abrir o app grafico (sem console). |
+| `zabbix-web-import-<data-hora>.log` | Uma linha por host. |
+| `zabbix-web-import-<data-hora>.json` | Resumo da execução mais o resultado por linha. |
+| `zabbix-web-import-<data-hora>.csv` | Resultado por linha, em planilha. |
 
-## Requisitos
-
-- Python 3.10 ou superior.
-- Acesso de rede ao servidor Zabbix.
-
-```powershell
-pip install -r requirements.txt
-```
-
-## App grafico
-
-Interface desktop para subir cameras sem usar linha de comando: voce baixa um
-modelo de planilha, preenche, carrega no app e a importacao usa exatamente a
-mesma logica do `zabbix_web_batch_import.py`.
-
-Para abrir:
-
-```powershell
-python -m app.main
-```
-
-ou duplo clique em `Iniciar App.bat`.
-
-Fluxo no app:
-
-1. Entre com usuario e senha na tela de login. A URL do Zabbix e a porta da
-   interface ficam em "Configuracoes" (canto do card de login; tambem ha
-   "Encerrar sessao" la quando conectado).
-2. Ao conectar, o app **busca no servidor os grupos, templates e proxies
-   disponiveis** e preenche os seletores. Grupos e templates aceitam multipla
-   selecao e **comecam sem nenhuma marcacao** (marque manualmente; sem grupo a
-   importacao fica bloqueada). O botao "Atualizar listas" reconsulta a qualquer
-   momento.
-3. Baixe o modelo de exemplo: um popup permite **escolher as colunas opcionais**
-   (Fabricante, Modelo, Firmware, Endereco MAC, Unidade, Etiqueta, Descricao). As
-   colunas fixas do modelo sao apenas **Nome do host** e **IP**. Preencha uma
-   linha por camera e carregue a planilha.
-4. A tela mostra o preview do que sera criado (nomes ja normalizados) e
-   **bloqueia a importacao enquanto houver linhas com erro** (IP vazio, nome
-   invalido, duplicados).
-5. Prefixo/sufixo sao opcionais. Importar usa a **mesma sessao** ja conectada: o
-   progresso aparece por camera e, ao final, um relatorio e salvo em `reports/`
-   no mesmo formato do CLI (o `consolidate.py` continua funcionando).
-
-Observacoes:
-
-- A criacao de hosts usa o login web; a **listagem** de grupos/templates/proxies
-  usa o JSON-RPC da propria sessao (`api_jsonrpc.php` com cookie), sem token.
-- A sessao fica aberta entre importacoes; se expirar no meio de uma execucao
-  longa, o app reloga automaticamente uma vez e continua.
-- "Sair" encerra a sessao e limpa as listas.
-- Linhas ignoradas (sem nome ou marcadas como "troca realizada") nao sao
-  importadas.
-- A normalizacao de nomes e a mesma do CLI: acentos e caracteres invalidos sao
-  removidos; nomes que colidem apos a normalizacao sao tratados como erro para
-  voce ajustar na planilha.
+O `consolidate.py` junta o resumo de várias execuções em um resumo único, para
+revisar um lote grande depois.
 
 ## Linha de comando
 
-O importador cria hosts para um intervalo do CSV. E **obrigatorio** informar ao
+O importador cria hosts para um intervalo do CSV. É **obrigatório** informar ao
 menos um grupo de destino:
 
 ```powershell
 python .\zabbix_web_batch_import.py --url "https://seu-zabbix" --group-id 1 --offset 0 --limit 5
 ```
 
-Hosts ja existentes sao detectados e contabilizados como "exists" no relatorio,
-sem interromper o lote.
-
-Execucao em lotes (fluxo padrao), pedindo usuario e senha no terminal:
+Execução em lotes (fluxo padrão), pedindo usuário e senha no terminal:
 
 ```powershell
 python .\run_batches.py --group-id 1
 ```
 
-Para um layout diferente, passe as opcoes de layout do importador:
+Para um layout diferente, passe as opções de layout do importador:
 
 ```powershell
 python .\run_batches.py --group-id 1 --host-prefix "CAM - " --visible-name-prefix "CAM "
 ```
 
-Roda o importador web em lotes de 25 registros, avisando (sem parar) se algum
-lote terminar com erro. Cada execucao gera em `reports/` um log e relatorios
-`zabbix-web-import-YYYYMMDD-HHMMSS.{log,json,csv}`.
+O `run_batches.py` roda o importador em lotes de 25 registros, avisando (sem
+parar) se algum lote terminar com erro. Prefixo e sufixo de host e de nome
+visível também são configuráveis por `--host-prefix`, `--host-suffix`,
+`--visible-name-prefix` e `--visible-name-suffix`.
 
-Para revisar o resumo de varias execucoes:
-
-```powershell
-python .\consolidate.py
-```
-
-## Layout aplicado no Zabbix
-
-Valores usados na criacao do host:
-
-- `host` tecnico: `<Name do CSV>` (prefixo/sufixo opcionais)
-- nome visivel: `<Name do CSV>` (prefixo/sufixo opcionais)
-- interface: `agent`, IP da camera, porta configuravel (default `10051`)
-- inventario: `name` = fabricante, `hardware` = modelo,
-  `hardware_full` = modelo + firmware, `macaddress_a` = MAC
-- status: monitorado, sem inventario automatico
-
-**Grupo de host, template e proxy nao tem default no codigo**: sao escolhidos na
-tela do app ou informados por `--group-id` / `--template-id` / `--proxy-id`.
-Prefixo/sufixo de host e nome visivel tambem sao configuraveis por
-`--host-prefix`, `--visible-name-prefix`, `--host-suffix` e
-`--visible-name-suffix`.
-
-## Campos lidos da planilha
-
-`Nome do host`, `IP`, `Fabricante`, `Modelo`, `Firmware`, `Endereço MAC`,
-`Unidade`, `Etiqueta`, `Descrição`.
-
-- **Grupo de host, template e proxy NAO vem da planilha**: sao escolhidos na tela
-  do app (secao "Opcoes de criacao") ou por argumento no CLI, e aplicados a todas
-  as linhas.
-- `Etiqueta` usa o formato `chave:valor` (varias separadas por `;`), ex.:
-  `site:MATRIZ`.
-- `Descrição` vai para o campo Description do host no Zabbix.
-- `Unidade` e apenas orientacao para quem preenche (nao vai para o Zabbix).
-
-Cabecalhos antigos tambem sao aceitos como alternativa (ex.: `Name`, `IP/Nome`,
-`Fabricante:`, `MAC`), porque a planilha de cameras existe em mais de um formato
-de exportacao.
-
-## Preparacao dos dados
-
-1. Atualize a planilha de cameras (`.xlsx`).
-2. Gere o CSV normalizado:
+Para preparar a planilha e revisar o resumo de várias execuções:
 
 ```powershell
 python .\xlsx_to_csv.py --input caminho\da\planilha.xlsx --output cameras_normalized.csv
-```
-
-3. Valide nomes e ausencia de duplicados (com `--in-place`, normaliza o proprio
-   CSV):
-
-```powershell
 python .\validate_camera_names.py .\cameras_normalized.csv
+python .\consolidate.py
 ```
 
-Os dados de entrada (`*.xlsx` e `cameras_normalized.csv`) **nao sao
-versionados**: contem informacoes do ambiente do cliente. O
-`exemplo_cameras.csv` existe apenas com dados ficticios, para testar o fluxo:
+Os dados de entrada (`*.xlsx`, `cameras_normalized.csv`) **não são versionados**:
+contêm informação do ambiente do cliente. O `exemplo_cameras.csv` existe com
+dados fictícios, para testar o fluxo:
 
 ```powershell
 python .\zabbix_web_batch_import.py --url "https://seu-zabbix" --group-id 1 --csv .\exemplo_cameras.csv
@@ -200,80 +204,209 @@ python .\zabbix_web_batch_import.py --url "https://seu-zabbix" --group-id 1 --cs
 
 ## Credenciais
 
-Nenhuma credencial fica salva em disco. Os dois fluxos pedem os dados na hora:
+Nenhuma credencial fica salva em disco, e os dois fluxos pedem os dados na hora:
 
-- **App grafico**: tela de login (a senha nao e gravada em lugar nenhum).
-- **Linha de comando** (`run_batches.py`): pede usuario e senha no terminal ao
-  iniciar; a senha e digitada sem eco (`getpass`). Nada de arquivo `.env`.
+- **App gráfico**: tela de login. A senha não é gravada em lugar nenhum.
+- **Linha de comando** (`run_batches.py`): pede usuário e senha no terminal; a
+  senha é digitada sem eco (`getpass`). Nada de arquivo `.env`.
 
-O importador `zabbix_web_batch_import.py` tambem aceita `--username`/`--password`
-para quem quiser automatizar (nesse caso a senha fica visivel na linha de
-comando).
+O `zabbix_web_batch_import.py` também aceita `--username` e `--password` para
+automação; nesse caso a senha fica visível na linha de comando.
 
-## Testes automatizados
+## Arquitetura
 
-Testes das funcoes puras (normalizacao de nome, leitura da resposta do Zabbix,
-montagem do formulario, colunas da planilha, validacao linha a linha, resolucao
-de caminhos e regras de UX das notificacoes). Usam apenas a stdlib (`unittest`) -
-nao exigem rede nem instalar nada:
+O princípio é o mesmo dos projetos irmãos: **a interface pede, o worker executa.**
+Nenhuma tela fala com a rede.
 
-```powershell
-python -m unittest discover -s tests -v
+```
+app/main_window.py  (UI — thread principal)
+     |  emite sinais do Qt
+     v
+app/session.py — SessionWorker  (QObject em QThread propria)
+     |
+     v
+zabbix_web_batch_import.py — core (login web + host.create)
+     |
+     +-- HTTP/form  --> frontend do Zabbix (/index.php)
+     +-- JSON-RPC   --> /api_jsonrpc.php  (grupos, templates, proxies)
 ```
 
-Rode antes de alterar o importador ou o modulo de planilha: sao esses testes que
-protegem contra a volta de erros ja corrigidos (nome duplicado, IP invalido,
-proxy omitido, coluna obrigatoria ausente).
+- `zabbix_web_batch_import.py` concentra a regra de negócio e é reaproveitado
+  pela CLI, pelos scripts de lote e pela interface gráfica. É a peça que garante
+  que os dois fluxos criem hosts exatamente do mesmo jeito.
+- `app/main_window.py` nunca chama a rede: emite sinais do Qt e reage a sinais de
+  volta. É o que mantém a janela respondendo.
+- `app/session.py` tem o `SessionWorker`, um `QObject` movido para uma `QThread`
+  com `moveToThread`. Login, busca das listas e importação rodam nessa thread, e
+  o Qt entrega os resultados por conexão enfileirada.
+- `app/spreadsheet.py` é puro de propósito: lê e valida a planilha sem tocar na
+  rede, o que o torna testável offline.
+- A **listagem** de grupos, templates e proxies usa o JSON-RPC da própria sessão
+  (cookie), sem token; a **criação** dos hosts usa o formulário web.
 
-## Distribuicao (instalador)
+## Testes
 
-Para quem vai usar, basta baixar **`ImportadorCamerasSetup-x.y.z.exe`** na pagina
-de *Releases* do repositorio e executar. Nao precisa de Python nem de nenhuma
-outra coisa.
+```powershell
+python -m unittest discover -s tests
+```
 
-O instalador:
+São **102 testes**, apenas com a stdlib (`unittest`), e rodam **sem rede nem
+Zabbix**. Cobrem a normalização de nomes, a leitura da resposta do Zabbix, a
+montagem do formulário, as colunas da planilha, a validação linha a linha, as
+regras de UX das notificações, a resolução de caminhos e a ausência de
+credencial embutida no código.
 
-- instala **por usuario**, sem pedir administrador, em
-  `%LOCALAPPDATA%\Programs\Importador de Cameras`;
-- cria atalho no Menu Iniciar (e, opcionalmente, na Area de Trabalho);
-- inclui desinstalador (aparece em "Aplicativos instalados").
+Rode antes de alterar o importador ou o módulo de planilha: são esses testes que
+protegem contra a volta de erros já corrigidos (nome duplicado, IP inválido,
+proxy omitido, coluna obrigatória ausente).
 
-## Build (executavel e instalador)
+O CI roda essa suíte no Python 3.12 e 3.14, e o Ruff em separado. O estado está
+no badge no topo.
 
-Gere o executavel (testado com PyInstaller 6.x):
+## Build do executável
 
 ```powershell
 pip install "pyinstaller>=6,<7"
-python -m PyInstaller --clean --noconfirm ImportadorCameras.spec
+python -m PyInstaller --clean --noconfirm ImportadorZabbix.spec
 ```
 
-E depois o instalador (requer o [Inno Setup 6](https://jrsoftware.org/isdl.php)):
+Gera `dist\ImportadorZabbix.exe`: arquivo único, sem console, com ícone e os
+metadados de `version_info.txt`. Os assets (ícone e fonte Inter) vão embutidos e
+são resolvidos por `app/paths.py`.
+
+Atenção ao editar o `.spec`: não exclua da stdlib módulos que as dependências
+usam. `email` (usado por `requests`/`urllib3`) e `xml` (usado por `openpyxl`) já
+quebraram o executável quando foram excluídos.
+
+## Instalador e portátil
+
+A Release publica dois binários. **Use o instalador, salvo se não puder.**
+
+| Binário | Quando usar |
+| --- | --- |
+| `ImportadorZabbixSetup-<versão>.exe` (instalador) | **Padrão.** Instala por usuário em `%LOCALAPPDATA%\Programs\Importador Zabbix`, sem pedir administrador; cria atalho no Menu Iniciar e, opcionalmente, na Área de Trabalho; instala o desinstalador e é atualizável por cima. |
+| `ImportadorZabbix.exe` (portátil) | Quando não der para rodar instalador (política da máquina) ou quando o app precisar rodar de pendrive ou pasta de rede. Não cria atalho nem desinstalador: o arquivo roda de onde estiver. |
+
+Para **gerar** os dois, requer o [Inno Setup 6](https://jrsoftware.org/isdl.php)
+— o executável vem do PyInstaller, acima:
 
 ```powershell
 & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" instalador.iss
 ```
 
-Resultados em `dist\`: `ImportadorCameras.exe` (~55 MB) e
-`ImportadorCamerasSetup-1.0.0.exe` (~57 MB).
+O `instalador.iss` empacota o `dist\ImportadorZabbix.exe` já gerado, por isso o
+PyInstaller roda primeiro.
 
-- **Icone**: aparece no arquivo, na janela e na barra de tarefas.
-- **Relatorios**: gravados na pasta `reports\` ao lado do executavel, junto com o
-  `app_error.log` em caso de falha. Se a pasta do executavel **nao** for gravavel
-  (ex.: instalado em `Program Files`), o app passa a usar
-  `%LOCALAPPDATA%\ImportadorCameras` automaticamente.
-- **Assets**: icone e fonte Inter vao embutidos (via `app/paths.py`).
+## Ao lançar uma nova versão
 
-Atencao ao editar o `.spec`: nao exclua da stdlib modulos que as dependencias
-usam. `email` (usado por `requests`/`urllib3`) e `xml` (usado por `openpyxl`) ja
-quebraram o executavel quando foram excluidos.
+1. Atualize `AppVersion` no `instalador.iss`.
+2. Atualize a versão no `version_info.txt`.
+3. Registre a versão no `CHANGELOG.md`.
+4. Gere o executável e o instalador.
+5. Publique a Release no GitHub com os dois binários.
 
-Ao lancar uma nova versao: atualize `AppVersion` no `instalador.iss`, a versao no
-`version_info.txt` e gere uma nova Release. **Nunca mude o `AppId`** do
-instalador - e ele que permite atualizar por cima e desinstalar corretamente.
+**Nunca mude o `AppId`** do instalador daqui para frente: é ele que permite
+atualizar por cima e desinstalar corretamente. (A versão 1.0.0 foi a exceção: o
+`AppId` mudou junto com o nome do produto, que colidia com o do app do NetBox.)
 
-## Controle de versao
+O que não versionar: `build/` e `dist/` (artefatos). O `ImportadorZabbix.spec` e
+o `instalador.iss` **são** versionados — são a configuração do build.
 
-O projeto esta sob git. O `.gitignore` exclui `reports/`, `__pycache__/`,
-`app_error.log`, `build/`, `dist/`, `*.xlsx`, `cameras_normalized.csv`,
-`.commandcode/` e saidas de build. Nenhuma credencial nem dado de cliente e
-versionado.
+## Onde o app grava arquivos
+
+| Conteúdo | Local |
+| --- | --- |
+| Relatórios (`reports/`) e `app_error.log` | Código-fonte: raiz do projeto. `.exe`: ao lado do executável; se a pasta não for gravável, `%LOCALAPPDATA%\ImportadorZabbix`. |
+
+Resolvido por `app/paths.py`.
+
+## Limitações conhecidas
+
+- **Sessão web, não token.** O app depende do formulário web do Zabbix, que não é
+  uma API estável: um upgrade de versão do Zabbix pode mudar o formulário e
+  exigir ajuste no importador. A listagem das listas, por outro lado, usa
+  JSON-RPC e é mais estável.
+- **Grupo de host obrigatório.** Não há default no código: sem um grupo marcado a
+  importação não começa.
+- **Sem retomada automática.** O `run_batches.py` avisa ao final se um lote
+  terminou com erro, mas não reprocessa sozinho.
+- **Nome longo.** O Zabbix tem limite de tamanho no campo de nome do host; nomes
+  muito longos são truncados na normalização.
+
+## Status
+
+- **Pronto:** login web, busca de grupos/templates/proxies, geração de planilha
+  modelo com colunas opcionais, preview com validação linha a linha,
+  normalização e bloqueio de duplicados, importação em lotes com progresso e
+  cancelamento, relatórios em log/JSON/CSV, consolidação de execuções,
+  instalador Inno Setup e portátil, e CI rodando os 102 testes.
+- **Fora do escopo, por decisão de projeto:** uso da API por token do Zabbix
+  (justamente para funcionar onde ela está bloqueada) e retomada automática de
+  lote com erro.
+
+## Estrutura do projeto
+
+| Caminho | Função |
+| --- | --- |
+| `zabbix_web_batch_import.py` | Importador principal: login web e `host.create`. O core. |
+| `run_batches.py` | Executa o importador em lotes de 25; pede credenciais no terminal. |
+| `consolidate.py` | Consolida os relatórios JSON de várias execuções em um resumo. |
+| `xlsx_to_csv.py` | Converte a planilha de origem em CSV normalizado. |
+| `validate_camera_names.py` | Normaliza a coluna de nome (ASCII) e valida duplicados. |
+| `run_app.py` | Ponto de entrada do executável (usado pelo PyInstaller). |
+| `app/` | Código da interface gráfica (módulos abaixo). |
+| `app/main.py` | Ponto de entrada do app: `QApplication`, fonte Inter, paleta e janela. |
+| `app/main_window.py` | Janela com as telas de login e de importação. |
+| `app/session.py` | `SessionWorker`: thread única que detém a sessão com o Zabbix. |
+| `app/spreadsheet.py` | Leitura e validação de `.xlsx`/`.csv` e geração do modelo. |
+| `app/toast.py` | Notificações não invasivas no canto superior direito. |
+| `app/paths.py` | Caminhos no código-fonte e no `.exe` (assets e pastas graváveis). |
+| `app/assets/` | Ícone do app e fonte Inter (`assets/fonts/`). |
+| `tests/` | Testes automatizados (`unittest`), sem rede. |
+| `tools/screenshots.py` | Utilitário de desenvolvimento que gera as telas deste README. |
+| `docs/screenshots/` | As imagens usadas neste README. |
+| `ImportadorZabbix.spec` | Configuração do build do PyInstaller. |
+| `instalador.iss` | Configuração do instalador (Inno Setup 6). |
+| `version_info.txt` | Metadados do `.exe` (nome, versão, empresa). |
+| `pyproject.toml` | Configuração do Ruff (lint). |
+| `requirements.txt` | Dependências de execução, com versão fixada. |
+| `requirements-dev.txt` | Dependências de desenvolvimento (`ruff`). |
+| `LICENSE` | Licença do projeto (MIT). |
+| `CHANGELOG.md` | Histórico de mudanças por versão. |
+| `reports/` | Relatórios gerados a cada execução (não versionado). |
+
+## Para quem vai mexer no código
+
+```powershell
+pip install -r requirements.txt
+python -m app.main
+```
+
+Dependências de execução: `openpyxl`, `requests`, `beautifulsoup4` e `PySide6`
+(`requirements.txt`, com versão fixada).
+
+Para o lint (o CI roda exatamente este comando):
+
+```powershell
+pip install -r requirements-dev.txt
+python -m ruff check .
+```
+
+## Controle de versão
+
+O projeto está sob git. O `.gitignore` exclui `reports/`, `app_error.log`,
+`__pycache__/`, `build/`, `dist/`, planilhas (`*.xlsx`) e
+`cameras_normalized.csv`. Nenhuma credencial nem dado de cliente é versionado: o
+`.env` é proibido por decisão de projeto e o `.spec`/`instalador.iss` são
+versionados de propósito, por serem a configuração do build.
+
+## Licença
+
+MIT — veja [LICENSE](LICENSE).
+
+## Autor
+
+**Lucas Daniel Santos**
+
+- GitHub: [@lucasdaniel2201](https://github.com/lucasdaniel2201)
+- LinkedIn: [lucas-santos](https://www.linkedin.com/in/lucas-santos-a620011b9)
