@@ -1,0 +1,11 @@
+# Fim de linha: o repositorio guarda sempre LF e o checkout tambem entrega LF.
+# Sem isso, no Windows, o git avisa "LF will be replaced by CRLF" a cada `git add`
+# e o mesmo arquivo aparece como modificado so por causa do fim de linha.
+* text=auto eol=lf
+
+# Binarios: nunca converter (o `text=auto` ja detecta pelo conteudo, mas ser
+# explicito evita qualquer risco de o git tratar um asset como texto).
+*.png binary
+*.ico binary
+*.ttf binary
+*.exe binary

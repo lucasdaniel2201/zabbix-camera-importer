@@ -1,0 +1,22 @@
+# Padroniza a configuracao do editor entre quem mexe no projeto: evita misturar
+# espaco com tab e normaliza o fim de linha com o .gitattributes.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{yml,yaml}]
+indent_size = 2
+
+# Markdown: quebra de linha no fim as vezes e proposital (quebra de paragrafo
+# em alguns renderizadores), entao nao removemos.
+[*.md]
+trim_trailing_whitespace = false
+
+[*.{png,ico,ttf}]
+insert_final_newline = false

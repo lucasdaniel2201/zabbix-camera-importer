@@ -14,7 +14,6 @@ from typing import Any
 import requests
 from bs4 import BeautifulSoup
 
-
 DEFAULT_GROUP_IDS: list[str] = []
 DEFAULT_TEMPLATE_IDS: list[str] = []
 DEFAULT_PROXY_ID = ""

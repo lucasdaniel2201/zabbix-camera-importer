@@ -1,0 +1,29 @@
+# Configuracao das ferramentas de desenvolvimento.
+#
+# Nao existe tabela [project] de proposito: o app nao e um pacote instalavel, e
+# ele e distribuido como executavel (PyInstaller + Inno Setup).
+
+[tool.ruff]
+# Alvo minimo: a matriz do CI cobre 3.12 e 3.14, entao as sugestoes de
+# modernizacao se limitam ao que existe na 3.12.
+target-version = "py312"
+line-length = 100
+exclude = ["build", "dist", ".venv", "venv", "docs"]
+
+[tool.ruff.lint]
+# Conjunto curado, nao "ALL": erro (E), pyflakes (F), espacos (W), ordenacao de
+# import (I), modernizacao (UP) e bugs comuns (B).
+select = ["E", "F", "W", "I", "UP", "B"]
+
+# E501 fica fora: o projeto tem mensagens de erro longas. Quebrar isso em
+# colunas menores pioraria a leitura sem ganho real.
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+# O projeto separa o proprio pacote dos demais com uma linha em branco, depois
+# do preambulo de sys.path - o default do ruff nao preve esse arranjo.
+known-first-party = ["app", "zabbix_web_batch_import", "run_batches", "consolidate", "xlsx_to_csv", "validate_camera_names", "run_app"]
+
+# Nota: `ruff format` NAO e aplicado sobre o codigo existente (geraria um diff
+# enorme so de reindentacao, impossivel de revisar). O `ruff check` e o que roda
+# no CI.

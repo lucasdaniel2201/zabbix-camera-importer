@@ -21,6 +21,7 @@ import zabbix_web_batch_import as core  # noqa: E402
 from app.paths import output_dir  # noqa: E402
 from app.spreadsheet import parse_tags  # noqa: E402
 
+
 def report_dir_path() -> Path:
     """Pasta de relatorios (ao lado do .exe quando empacotado)."""
     return output_dir("reports")

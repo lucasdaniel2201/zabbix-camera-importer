@@ -1,0 +1,67 @@
+# -----------------------------------------------------------------------
+# Workflow de testes automatizados do zabbix-camera-importer
+# -----------------------------------------------------------------------
+name: Testes
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # ---------------------------------------------------------------------
+  # Job principal — roda a suite de unittest em diferentes versoes do Python.
+  # Diferente do app irmao do NetBox, este projeto nao usa a DPAPI do Windows
+  # (nenhuma credencial e gravada em disco), entao o runner Linux serve.
+  # ---------------------------------------------------------------------
+  rodar-testes:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.14"]
+
+    # QT_QPA_PLATFORM=offscreen evita que testes que inicializam Qt abortem
+    # por falta de display — os runners do GitHub Actions nao possuem
+    # interface grafica, e sem essa variavel o Qt encerra o processo com
+    # um erro fatal antes mesmo dos testes rodarem.
+    env:
+      QT_QPA_PLATFORM: offscreen
+
+    steps:
+      - name: Checkout do repositorio
+        uses: actions/checkout@v5
+
+      - name: Configurar Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Atualizar pip
+        run: python -m pip install --upgrade pip
+
+      - name: Instalar dependencias
+        run: python -m pip install -r requirements.txt
+
+      - name: Rodar a suite de testes
+        run: python -m unittest discover -s tests -v
+
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do repositorio
+        uses: actions/checkout@v5
+
+      - name: Configurar Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Instalar as dependencias de desenvolvimento
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Rodar o Ruff
+        run: python -m ruff check .

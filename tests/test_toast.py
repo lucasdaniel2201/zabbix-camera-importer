@@ -51,7 +51,7 @@ class ToastTestCase(unittest.TestCase):
 
         itens = self.manager._items
         self.assertEqual(len(itens), 3)
-        for anterior, seguinte in zip(itens, itens[1:]):
+        for anterior, seguinte in zip(itens, itens[1:], strict=False):
             self.assertGreaterEqual(
                 seguinte.y(),
                 anterior.y() + anterior.height(),

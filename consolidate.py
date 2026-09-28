@@ -19,7 +19,7 @@ for jf in json_files:
     total_created += s["created"]
     total_exists += s["exists"]
     total_errors += s["errors"]
-    
+
     # Coletar erros individuais
     for r in data["results"]:
         if r["status"] == "error":
