@@ -118,6 +118,6 @@ e este projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
   Setup), com opção portátil.
 - Suíte de 102 testes com `unittest` (apenas stdlib), sem rede.
 
-[1.5.0]: https://github.com/lucasdaniel2201/cam-import/compare/v1.0.1...v1.5.0
-[1.0.1]: https://github.com/lucasdaniel2201/cam-import/compare/v1.0.0...v1.0.1
-[1.0.0]: https://github.com/lucasdaniel2201/cam-import/releases/tag/v1.0.0
+[1.5.0]: https://github.com/lucasdaniel2201/zabbix-camera-importer/compare/v1.0.1...v1.5.0
+[1.0.1]: https://github.com/lucasdaniel2201/zabbix-camera-importer/compare/v1.0.0...v1.0.1
+[1.0.0]: https://github.com/lucasdaniel2201/zabbix-camera-importer/releases/tag/v1.0.0
