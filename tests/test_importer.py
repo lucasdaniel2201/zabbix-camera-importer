@@ -6,9 +6,12 @@ erro da API e o comportamento do cliente JSON-RPC (auth, retry, chunking).
 """
 
 import json
+import socket
 import sys
 import unittest
 from pathlib import Path
+
+import requests
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
@@ -513,6 +516,92 @@ class TestClientRequest(unittest.TestCase):
             [c["payload"]["method"] for c in self.calls if "user." in c["payload"]["method"]],
             ["user.login"],
         )
+
+
+class TestPreferIPv4(unittest.TestCase):
+    """Resolucao por IPv4: sem Happy Eyeballs, cada IPv6 inoperante custa ~21s."""
+
+    @staticmethod
+    def _enderecos() -> list:
+        return [
+            (socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("2606:4700::1", 443)),
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("104.21.72.11", 443)),
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("172.67.173.105", 443)),
+        ]
+
+    def setUp(self) -> None:
+        self.real = socket.getaddrinfo
+        # Resolucao falsa: o contexto tem de devolver IPv4 sem tocar na rede.
+        socket.getaddrinfo = lambda *a, **k: self._enderecos()
+
+    def tearDown(self) -> None:
+        socket.getaddrinfo = self.real
+
+    def test_descarta_ipv6_durante_o_bloco(self):
+        with core._ipv4_only():
+            achados = socket.getaddrinfo("zabbix.example.com", 443)
+        familias = [a[0] for a in achados]
+        self.assertNotIn(socket.AF_INET6, familias)
+        self.assertEqual(familias, [socket.AF_INET, socket.AF_INET])
+
+    def test_restaura_getaddrinfo_ao_sair(self):
+        antes = socket.getaddrinfo
+        with core._ipv4_only():
+            pass
+        self.assertIs(socket.getaddrinfo, antes)
+
+    def test_restaura_getaddrinfo_mesmo_com_excecao(self):
+        """Se a chamada levantar, o patch nao pode ficar por cima do processo."""
+        antes = socket.getaddrinfo
+        with self.assertRaises(RuntimeError):
+            with core._ipv4_only():
+                raise RuntimeError("falha no meio da chamada")
+        self.assertIs(socket.getaddrinfo, antes)
+
+    def test_sem_ipv4_na_lista_usa_tudo(self):
+        """So IPv6 continua valendo: melhor tentar do que nao conectar."""
+        so_ipv6 = [a for a in self._enderecos() if a[0] == socket.AF_INET6]
+        socket.getaddrinfo = lambda *a, **k: so_ipv6
+        with core._ipv4_only():
+            achados = socket.getaddrinfo("zabbix.example.com", 443)
+        self.assertEqual([a[0] for a in achados], [socket.AF_INET6])
+
+    def test_adapter_montado_na_session_do_cliente(self):
+        client = core.ZabbixApiClient("https://zabbix.example.com", "admin", "s3nh4")
+        for prefixo in ("https://", "http://"):
+            adapter = client._session.get_adapter(prefixo + "api_jsonrpc.php")
+            self.assertIsInstance(adapter, core._IPv4Adapter)
+
+    def test_adapter_so_iv4_durante_o_envio(self):
+        """O send do adapter resolve sem IPv6, e restaura ao terminar."""
+        client = core.ZabbixApiClient("https://zabbix.example.com", "admin", "s3nh4")
+        adapter = client._session.get_adapter("https://api_jsonrpc.php")
+        antes = socket.getaddrinfo
+
+        resolvidos: list = []
+        super_send = requests.adapters.HTTPAdapter.send
+
+        def send_que_espia(self, request, **kwargs):
+            resolvidos.extend(a[0] for a in socket.getaddrinfo("zabbix.example.com", 443))
+            return FakeResponse(rpc_result({}))
+
+        try:
+            requests.adapters.HTTPAdapter.send = send_que_espia
+            request = requests.Request("POST", "https://zabbix.example.com/api_jsonrpc.php").prepare()
+            adapter.send(request, timeout=1)
+        finally:
+            requests.adapters.HTTPAdapter.send = super_send
+
+        self.assertTrue(resolvidos, "o send do adapter nao chegou a resolver")
+        self.assertNotIn(socket.AF_INET6, resolvidos)
+        self.assertIs(socket.getaddrinfo, antes)
+
+def test_fora_do_adapter_resolve_com_ipv6_de_novo(self):
+        """O efeito nao vaza: fora do send, a resolucao volta a ter IPv6."""
+        with core._ipv4_only():
+            pass
+        familias = [a[0] for a in socket.getaddrinfo("zabbix.example.com", 443)]
+        self.assertIn(socket.AF_INET6, familias)
 
 
 if __name__ == "__main__":

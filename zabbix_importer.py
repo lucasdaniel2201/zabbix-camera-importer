@@ -11,17 +11,24 @@ Decisoes registradas (ver CONTEXT.md):
 - Um host.create por host em vez de host.massadd (Q4): relatorio por linha.
 - Pré-consulta host.get antes do lote para marcar 'exists' sem chamada de
   criacao (Q8=a); a substring de erro continua como rede de seguranca.
+- Resolucao por IPv4 durante as chamadas (PREFER_IPV4): o urllib3 nao faz
+  Happy Eyeballs e cada IPv6 inoperante custa ~21s. Ver o comentario da
+  constante.
 """
 
 import csv
 import json
 import re
+import socket
 import unicodedata
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import requests
+from requests.adapters import HTTPAdapter
 
 # -----------------------------------------------------------------------------
 # Defaults (valores iniciais dos campos da UI; o app usa estes)
@@ -40,6 +47,19 @@ LEGACY_REPORT_PREFIX = "zabbix-web-import-"
 
 # Hosts por chamada host.get na pré-consulta de existentes.
 HOST_GET_CHUNK = 200
+
+# Resolver por IPv4 quando o IPv6 estiver anunciado e nao funcionar.
+#
+# O urllib3 nao implementa Happy Eyeballs (RFC 8305): ele percorre os
+# enderecos de getaddrinfo em ordem e espera o SO desistir de cada um. Numa
+# rede que anuncia IPv6 mas nao encaminha (roteador com SLAAC sem rota), cada
+# IPv6 custa ~21s antes do IPv4 responder. Medido no Zabbix de producao: dois
+# IPv6 + IPv4 = 42s na primeira conexao e 165ms nas seguintes (keep-alive).
+#
+# Navegador nao sente o mesmodelay porque corre IPv4 contra IPv6. Aqui o custo
+# cai para menos de 1s. Se o dia vier em que o IPv6 funcionar, isto fica sem
+# efeito: sobrando endereco IPv6 ele seria escolhido normalmente.
+PREFER_IPV4 = True
 
 
 # -----------------------------------------------------------------------------
@@ -89,6 +109,45 @@ class ZabbixApiError(RuntimeError):
 
 
 # -----------------------------------------------------------------------------
+# Resolucao de nome: preferir IPv4
+# -----------------------------------------------------------------------------
+
+@contextmanager
+def _ipv4_only() -> Iterator[None]:
+    """Descarta IPv6 da resolucao de nome durante o bloco.
+
+    O patch e no socket.getaddrinfo, que e onde o urllib3 le os enderecos. Vale
+    so para o processo (que so fala com o Zabbix) e e revertido ao final, ainda
+    que a chamada levante excecao.
+    """
+    original = socket.getaddrinfo
+
+    def so_ipv4(host, port, *args, **kwargs):
+        achados = original(host, port, *args, **kwargs)
+        ipv4 = [a for a in achados if a[0] == socket.AF_INET]
+        # Sem IPv4 na lista, devolve tudo: melhor tentar o IPv6 do que falhar.
+        return ipv4 or achados
+
+    socket.getaddrinfo = so_ipv4
+    try:
+        yield
+    finally:
+        socket.getaddrinfo = original
+
+
+class _IPv4Adapter(HTTPAdapter):
+    """Adapter que resolve por IPv4 durante o envio da requisicao.
+
+    Montado na Session do cliente em vez de patchar socket.getaddrinfo para
+    sempre, para que o efeito fique restrito ao trafego do Zabbix.
+    """
+
+    def send(self, request, **kwargs):  # type: ignore[no-untyped-def]
+        with _ipv4_only():
+            return super().send(request, **kwargs)
+
+
+# -----------------------------------------------------------------------------
 # Cliente da API
 # -----------------------------------------------------------------------------
 
@@ -107,6 +166,10 @@ class ZabbixApiClient:
         self.password = password
         self.timeout = timeout
         self._session = requests.Session()
+        if PREFER_IPV4:
+            adapter = _IPv4Adapter()
+            self._session.mount("https://", adapter)
+            self._session.mount("http://", adapter)
         self._token: str = ""
         self.server_version: str = ""
 

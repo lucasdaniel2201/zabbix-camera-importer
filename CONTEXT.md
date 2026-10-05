@@ -68,6 +68,39 @@ log e host nunca divergirem.
 **`requests` com TLS verificado.** O servidor alvo tem HTTPS com certificado
 valido. Nao adicionar `verify=False`.
 
+**Resolucao por IPv4 (`PREFER_IPV4`), e nao um timeout menor.** O `urllib3` nao
+implementa Happy Eyeballs (RFC 8305): percorre os enderecos de `getaddrinfo` em
+ordem e espera o SO desistir de cada um. Na rede do escritorio, o IPv6 e
+anunciado e nao encaminhado, entao cada IPv6 custa ~21s. Medido no Zabbix de
+producao (`howbe.clouditservice.com.br`, 2 IPv6 + 2 IPv4): **42,4s na primeira
+conexao e ~170ms nas seguintes** (keep-alive). O login era a unica chamada que
+pagia isso, porque e a primeira a abrir o socket.
+
+A mitigacao e `_IPv4Adapter`, montado na `Session` do cliente: ele involve o
+envio em `_ipv4_only()`, que descarta `AF_INET6` do `getaddrinfo` e restaura
+logo em seguida. Mesmo resultado: **276ms** na primeira chamada. Escolhas
+deliberadas:
+
+- Adapter, e nao patch permanente de `socket.getaddrinfo`, para o efeito ficar
+  restrito ao trafego do Zabbix. Processo so fala com o Zabbix, entao o efeito
+  global seria inofensivo - mas o adapter nao depende dessa suposicao.
+- Se a lista nao tiver nenhum IPv4, devolve tudo. So IPv6 continua valendo:
+  melhor tentar do que nao conectar.
+- **Isto e mitigacao, nao correcao de raiz.** A correcao e na rede (desligar o
+  IPv6 do roteador ou arrumar o roteamento do prefixo `2804:`). O app fica rapido
+  de qualquer jeito, mas oque o `PREFER_IPV4` esconde e so o diagnostico: se um
+  dia der para remover, e porque a rede foi corrigida. Nao aumentar o `timeout`.
+
+**Endereco padrao e a raiz do dominio.** A API responde em
+`https://howbe.clouditservice.com.br/api_jsonrpc.php` (retorna `6.4.21`); o
+caminho `/zabbix/api_jsonrpc.php` responde **404**. O Zabbix esta instalado na
+raiz, sem subdiretorio, mesmo com o frontend em `/zabbix.php?action=...`. Duas
+coisas decorrem disso: `DEFAULT_URL` em `app/main_window.py` e a raiz (nao
+`http://localhost/zabbix`, que nunca funcionou aqui - nada escuta em
+`localhost:80`, e o login falhava com `WinError 10061` antes de qualquer
+chamada de API), e ao depurar URL de Zabbix a resposta 404 em `/zabbix/...`
+significa endereco errado, nao API fora do ar.
+
 **Importacao em thread dedicada.** `SessionWorker` vive em uma `QThread` e emite
 sinais para a UI, para uma importacao longa nao travar a interface. O cancelamento
 e por flag, checada entre linhas.
@@ -96,7 +129,7 @@ historico anterior a migracao continuar contando.
 
 ## Como rodar
 
-Testes (120 no total, stdlib `unittest`, sem rede):
+Testes (126 no total, stdlib `unittest`, sem rede):
 
 ```powershell
 python -m unittest discover -s tests -v
