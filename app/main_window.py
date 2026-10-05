@@ -49,7 +49,10 @@ from app.spreadsheet import (  # noqa: E402
 )
 from app.toast import ToastManager  # noqa: E402
 
-DEFAULT_URL = "http://localhost/zabbix"
+# Endereco do Zabbix deste ambiente. A API responde na raiz do dominio
+# (apiinfo.version em https://<host>/api_jsonrpc.php); o subdiretorio /zabbix
+# responde 404 aqui. O app acrescenta o api_jsonrpc.php sozinho.
+DEFAULT_URL = "https://howbe.clouditservice.com.br"
 # Alturas dos banners (usadas tambem para nao cobrir com notificacoes).
 LOGIN_BANNER_HEIGHT = 190
 SETUP_BANNER_HEIGHT = 76
