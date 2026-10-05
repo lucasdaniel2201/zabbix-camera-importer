@@ -37,7 +37,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import zabbix_web_batch_import as core  # noqa: E402
+import zabbix_importer as core  # noqa: E402
 from app.session import ImportOptions, SessionWorker  # noqa: E402
 from app.spreadsheet import (  # noqa: E402
     COLUMNS_BY_KEY,
@@ -304,7 +304,7 @@ class SettingsDialog(QDialog):
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Importador Zabbix")
+        self.setWindowTitle("Importador de Cameras - Zabbix")
         self.resize(1240, 900)
 
         self._sheet: SheetResult | None = None
@@ -394,7 +394,7 @@ class MainWindow(QMainWindow):
         body.addWidget(card, 0, Qt.AlignmentFlag.AlignHCenter)
         body.addStretch(1)
 
-        footer = QLabel("Importador Zabbix")
+        footer = QLabel("Importador de Cameras para o Zabbix")
         footer.setObjectName("loginFooter")
         footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
         body.addWidget(footer)
@@ -412,7 +412,7 @@ class MainWindow(QMainWindow):
 
         text_col = QVBoxLayout()
         text_col.setSpacing(0)
-        title = QLabel("Importador Zabbix")
+        title = QLabel("Importador de Cameras")
         title.setObjectName("brandTitle")
         subtitle = QLabel("Envio de cameras para o Zabbix")
         subtitle.setObjectName("brandSubtitle")
@@ -438,7 +438,7 @@ class MainWindow(QMainWindow):
 
         text_col = QVBoxLayout()
         text_col.setSpacing(0)
-        title = QLabel("Importador Zabbix")
+        title = QLabel("Importador de Cameras")
         title.setObjectName("brandTitle")
         subtitle = QLabel("Envio de cameras para o Zabbix")
         subtitle.setObjectName("brandSubtitle")
@@ -774,14 +774,12 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             self._sheet = None
             self._file_path = None
-            self.file_label.setText("Nenhum arquivo selecionado.")
             self._clear_preview()
             self._notify(f"Planilha invalida: {exc}", "error")
             return
 
         self._sheet = sheet
         self._file_path = path
-        self.file_label.setText(path.name)
         valid = len(sheet.valid_rows)
         errors = len(sheet.rows_with_errors)
         ignored = sheet.skipped_empty + sheet.skipped_trocas

@@ -1,8 +1,8 @@
 # Metadados do executavel (aba "Detalhes" das Propriedades do arquivo).
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 0, 1, 0),
-    prodvers=(1, 0, 1, 0),
+    filevers=(1, 5, 0, 0),
+    prodvers=(1, 5, 0, 0),
     mask=0x3F,
     flags=0x0,
     OS=0x40004,
@@ -17,13 +17,13 @@ VSVersionInfo(
           "040904B0",
           [
             StringStruct("CompanyName", "L&K Tecnologia"),
-            StringStruct("FileDescription", "Importador de Cameras para Zabbix"),
-            StringStruct("FileVersion", "1.0.1.0"),
+            StringStruct("FileDescription", "Importador Zabbix"),
+            StringStruct("FileVersion", "1.5.0.0"),
             StringStruct("InternalName", "ImportadorZabbix"),
             StringStruct("LegalCopyright", "L&K Tecnologia"),
             StringStruct("OriginalFilename", "ImportadorZabbix.exe"),
             StringStruct("ProductName", "Importador Zabbix"),
-            StringStruct("ProductVersion", "1.0.1.0"),
+            StringStruct("ProductVersion", "1.5.0.0"),
           ],
         )
       ]

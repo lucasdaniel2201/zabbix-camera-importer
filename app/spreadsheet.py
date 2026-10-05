@@ -11,15 +11,14 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-# Permite importar modulos da raiz do projeto (xlsx_to_csv, zabbix_*).
+# Permite importar modulos da raiz do projeto (zabbix_importer).
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import openpyxl  # noqa: E402
 
-import zabbix_web_batch_import as core  # noqa: E402
-from xlsx_to_csv import normalize_for_match, normalize_vendor  # noqa: E402
+import zabbix_importer as core  # noqa: E402
 
 IP_RE = re.compile(r"^\d{1,3}(\.\d{1,3}){3}$")
 MAC_RE = re.compile(r"^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$")
@@ -177,7 +176,7 @@ def parse_tags(text: str) -> list[tuple[str, str]]:
 
 def _normalize_header(value: str) -> str:
     """Cabecalho sem acentos e sem espacos duplos, caixa baixa."""
-    return re.sub(r"\s+", " ", normalize_for_match(value)).strip()
+    return re.sub(r"\s+", " ", core.normalize_for_match(value)).strip()
 
 
 def _alias_candidates(spec: ColumnSpec) -> list[str]:
@@ -251,7 +250,7 @@ def _validate_row(row_number: int, cells: dict[str, str], dup_lines: dict[str, l
         result.warnings.append(f"MAC com formato incomum: '{mac}'.")
 
     if cells.get("Vendor"):
-        cells["Vendor"] = normalize_vendor(cells["Vendor"])
+        cells["Vendor"] = core.normalize_vendor(cells["Vendor"])
 
     return result
 
@@ -291,7 +290,7 @@ def _rows_from_table(
         if not name_original:
             skipped_empty += 1
             continue
-        if "troca realizada" in normalize_for_match(name_original):
+        if "troca realizada" in core.normalize_for_match(name_original):
             skipped_trocas += 1
             continue
 
@@ -304,7 +303,7 @@ def _rows_from_table(
 
         if not name_original:
             continue
-        if "troca realizada" in normalize_for_match(name_original):
+        if "troca realizada" in core.normalize_for_match(name_original):
             continue
 
         rows.append(_validate_row(row_number, cells, seen_names))

@@ -1,9 +1,18 @@
-"""Consolida todos os relatorios JSON dos lotes em um resumo final."""
+"""Consolida todos os relatorios JSON das execucoes em um resumo final.
+
+Le os dois prefixos de relatorio: o atual (zabbix-import-) e o legado
+(zabbix-web-import-), para o historico anterior a migracao para a API
+continuar contando.
+"""
 import json
 from pathlib import Path
 
 REPORT_DIR = Path(__file__).resolve().parent / "reports"
-json_files = sorted(REPORT_DIR.glob("zabbix-web-import-*.json"))
+PREFIXES = ("zabbix-import-", "zabbix-web-import-")
+
+json_files = sorted(
+    {jf for prefix in PREFIXES for jf in REPORT_DIR.glob(f"{prefix}*.json")}
+)
 
 total_processed = 0
 total_created = 0

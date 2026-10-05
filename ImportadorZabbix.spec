@@ -53,9 +53,8 @@ a = Analysis(
     # Assets embutidos: o codigo os procura em app/assets via app/paths.py.
     datas=[(str(ROOT / "app" / "assets"), "app/assets")],
     hiddenimports=[
-        # Modulos da raiz importados pelo app (garantia explicita).
-        "zabbix_web_batch_import",
-        "xlsx_to_csv",
+        # Modulo da raiz importado pelo app (garantia explicita).
+        "zabbix_importer",
     ],
     hookspath=[],
     hooksconfig={},

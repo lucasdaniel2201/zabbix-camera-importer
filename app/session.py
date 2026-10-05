@@ -1,15 +1,13 @@
 """Sessao unica com o Zabbix, executada em thread dedicada.
 
-O SessionWorker e dono de um unico ZabbixWebClient (e da sua sessao HTTP):
+O SessionWorker e dono de um unico ZabbixApiClient (e do seu token):
 logar, listar grupos/templates/proxies e importar acontecem todos na mesma
-thread e reusam a mesma sessao - sem novo login entre importacoes.
+thread e reusam o mesmo token - sem novo login entre importacoes.
 """
 
 import sys
-from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from types import SimpleNamespace
 
 from PySide6.QtCore import QObject, Signal, Slot
 
@@ -17,7 +15,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import zabbix_web_batch_import as core  # noqa: E402
+import zabbix_importer as core  # noqa: E402
 from app.paths import output_dir  # noqa: E402
 from app.spreadsheet import parse_tags  # noqa: E402
 
@@ -27,34 +25,8 @@ def report_dir_path() -> Path:
     return output_dir("reports")
 
 
-@dataclass
-class ImportOptions:
-    """Opcoes de layout da criacao (nao contem credenciais)."""
-
-    url: str = ""
-    host_prefix: str = ""
-    host_suffix: str = ""
-    visible_name_prefix: str = ""
-    visible_name_suffix: str = ""
-    group_ids: list[str] = field(default_factory=lambda: list(core.DEFAULT_GROUP_IDS))
-    template_ids: list[str] = field(default_factory=lambda: list(core.DEFAULT_TEMPLATE_IDS))
-    proxy_id: str = core.DEFAULT_PROXY_ID
-    proxy_name: str = core.DEFAULT_PROXY_NAME
-    port: str = core.DEFAULT_PORT
-    timeout: int = 60
-
-    def to_form_namespace(self) -> SimpleNamespace:
-        """Objeto com os atributos que core.build_form_data espera do argparse."""
-        return SimpleNamespace(
-            host_prefix=self.host_prefix,
-            host_suffix=self.host_suffix,
-            visible_name_prefix=self.visible_name_prefix,
-            visible_name_suffix=self.visible_name_suffix,
-            template_id=self.template_ids,
-            group_id=self.group_ids,
-            proxy_id=self.proxy_id,
-            port=self.port,
-        )
+# ImportOptions agora vem do core (zabbix_importer.py)
+ImportOptions = core.ImportOptions
 
 
 class SessionWorker(QObject):
@@ -78,7 +50,7 @@ class SessionWorker(QObject):
 
     def __init__(self) -> None:
         super().__init__()
-        self._client: core.ZabbixWebClient | None = None
+        self._client: core.ZabbixApiClient | None = None
         self._url = ""
         self._username = ""
         self._cancel = False
@@ -91,7 +63,7 @@ class SessionWorker(QObject):
 
     # ------------------------------------------------------------------ estado
     @property
-    def connected_client(self) -> core.ZabbixWebClient | None:
+    def connected_client(self) -> core.ZabbixApiClient | None:
         return self._client
 
     @property
@@ -102,7 +74,7 @@ class SessionWorker(QObject):
     @Slot(object, object, object)
     def connect_zabbix(self, url: str, username: str, password: str) -> None:
         try:
-            client = core.ZabbixWebClient(base_url=url, username=username, password=password)
+            client = core.ZabbixApiClient(base_url=url, username=username, password=password)
             client.login()
         except Exception as exc:
             self.connect_failed.emit(str(exc))
@@ -122,11 +94,11 @@ class SessionWorker(QObject):
             self.options_failed.emit("Nao ha sessao conectada.")
             return
         try:
-            options = client.fetch_options()
+            opts = client.fetch_options()
         except Exception as exc:
             self.options_failed.emit(f"Falha ao consultar opcoes do Zabbix: {exc}")
             return
-        self.options_ready.emit(options["groups"], options["proxies"], options["templates"])
+        self.options_ready.emit(opts["groups"], opts["proxies"], opts["templates"])
 
     @Slot(object, object)
     def import_rows(self, rows: list, options: ImportOptions) -> None:
@@ -143,15 +115,30 @@ class SessionWorker(QObject):
             self.import_failed.emit(f"Falha ao criar a pasta de relatorios: {exc}")
             return
 
-        log_path = report_dir / f"zabbix-web-import-{timestamp}.log"
-        json_report_path = report_dir / f"zabbix-web-import-{timestamp}.json"
-        csv_report_path = report_dir / f"zabbix-web-import-{timestamp}.csv"
+        log_path = report_dir / f"{core.REPORT_PREFIX}{timestamp}.log"
+        json_report_path = report_dir / f"{core.REPORT_PREFIX}{timestamp}.json"
+        csv_report_path = report_dir / f"{core.REPORT_PREFIX}{timestamp}.csv"
 
         lines: list[str] = []
 
         def emit_log(message: str) -> None:
             lines.append(message)
             self.log.emit(message)
+
+        # Pre-consulta hosts existentes para evitar erros "ja existe"
+        all_host_names = []
+        for row in rows:
+            technical, _visible = core.host_names(row.name_normalized, options)
+            all_host_names.append(technical)
+
+        existing: set[str] = set()
+        if all_host_names:
+            try:
+                existing = client.existing_hosts(all_host_names)
+                if existing:
+                    emit_log(f"Hosts ja existentes detectados: {len(existing)}")
+            except Exception as exc:
+                emit_log(f"Aviso: falha ao verificar hosts existentes: {exc}")
 
         emit_log(f"=== Importacao iniciada em {timestamp} ===")
         emit_log(f"Registros validos: {len(rows)}")
@@ -181,46 +168,48 @@ class SessionWorker(QObject):
                 description=row.cells.get("Description", ""),
                 tags=parse_tags(row.cells.get("Tag", "")),
             )
-            host_name = f"{options.host_prefix}{row.name_normalized}{options.host_suffix}"
-            visible_name = (
-                f"{options.visible_name_prefix}{row.name_normalized}{options.visible_name_suffix}"
-            ).strip() or row.name_normalized
+            technical, visible = core.host_names(row.name_normalized, options)
 
-            try:
-                csrf_token = client.fetch_host_form_csrf()
-                form_data = core.build_form_data(
-                    csrf_token, record, options.to_form_namespace()
-                )
-                payload = client.create_host(form_data)
-                status, message = core.parse_result(payload)
-            except Exception as exc:
-                status = "error"
-                message = str(exc)
+            # Ja existe? Marca sem chamar a API
+            if technical in existing:
+                status = "exists"
+                message = "Host ja existe"
+                emit_log(f"Ja existia | {technical}")
+            else:
+                try:
+                    host_params = core.build_host_params(
+                        record=record,
+                        technical_name=technical,
+                        visible_name=visible,
+                        options=options,
+                    )
+                    result = client.create_host(host_params)
+                    status, message = core.parse_api_result(result)
+                except Exception as exc:
+                    status, message = core.classify_api_error(exc)
 
-            results.append(
-                {
-                    "csv_index": row.row_number,
-                    "host": host_name,
-                    "visible_name": visible_name,
-                    "ip": row.cells.get("IP", ""),
-                    "status": status,
-                    "message": message,
-                    "vendor": row.cells.get("Vendor", ""),
-                    "model": row.cells.get("Model", ""),
-                }
-            )
+            results.append({
+                "csv_index": row.row_number,
+                "host": technical,
+                "visible_name": visible,
+                "ip": row.cells.get("IP", ""),
+                "status": status,
+                "message": message,
+                "vendor": row.cells.get("Vendor", ""),
+                "model": row.cells.get("Model", ""),
+            })
 
             if status == "created":
                 created += 1
-                emit_log(f"Criado | {host_name}")
+                emit_log(f"Criado | {technical}")
             elif status == "exists":
                 exists += 1
-                emit_log(f"Ja existia | {host_name} | {message}")
+                emit_log(f"Ja existia | {technical} | {message}")
             else:
                 errors += 1
-                emit_log(f"Falhou | {host_name} | {message}")
+                emit_log(f"Falhou | {technical} | {message}")
 
-            self.progress.emit(index, total, host_name, status)
+            self.progress.emit(index, total, technical, status)
 
         summary = {
             "timestamp": timestamp,
@@ -240,8 +229,8 @@ class SessionWorker(QObject):
         }
 
         try:
-            with log_path.open("w", encoding="utf-8") as log_file:
-                log_file.write("\n".join(lines) + "\n")
+            with log_path.open("w", encoding="utf-8") as f:
+                f.write("\n".join(lines) + "\n")
             core.write_json_report(json_report_path, summary, results)
             core.write_csv_report(csv_report_path, results)
             emit_log("=== Execucao finalizada ===")
@@ -263,7 +252,7 @@ class SessionWorker(QObject):
     def logout(self) -> None:
         if self._client is not None:
             try:
-                self._client.session.close()
+                self._client.close()
             except Exception:
                 pass
         self._client = None

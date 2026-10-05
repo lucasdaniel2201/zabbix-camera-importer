@@ -8,7 +8,7 @@
 ; relatorios continuam sendo salvos ao lado do executavel.
 
 #define AppName "Importador Zabbix"
-#define AppVersion "1.0.1"
+#define AppVersion "1.5.0"
 #define AppPublisher "L&K Tecnologia"
 #define AppExeName "ImportadorZabbix.exe"
 #define SourceExe "dist\ImportadorZabbix.exe"
